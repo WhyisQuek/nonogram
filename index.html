@@ -116,20 +116,22 @@
 
     /* ── Puzzle scale wrapper ────────────────────────────────── */
     /*
-     * #puzzle-scale is the element we CSS-transform with scale().
-     * Using transform-origin: top left means the scaled box occupies
-     * exactly [0 .. NATURAL_W*scale] horizontally, so the surrounding
-     * #puzzle-sizer (sized by JS to the scaled dimensions and centred
-     * with margin:auto) keeps everything perfectly centred.
+     * #puzzle-sizer is a fixed-size "viewport" (clips overflow) sized to
+     * the fit dimensions. #puzzle-scale is transformed inside it with
+     * scale + translate: single-finger draws, two-finger pinch zooms and
+     * pans. Clipping keeps the legend below from shifting when zoomed.
      */
     #puzzle-sizer {
       margin: 0 auto;
-      /* width & height set by JS to natural size × scale */
+      overflow: hidden;
+      position: relative;
+      touch-action: none;
+      /* width & height set by JS to natural size × fitScale */
     }
 
     #puzzle-scale {
       transform-origin: top left;
-      /* transform: scale(...) and width set by JS */
+      /* transform + width set by JS */
     }
 
     /* ── Puzzle grid ─────────────────────────────────────────── */
@@ -300,6 +302,7 @@
   <div id="toolbar">
     <button class="btn btn-mode active" id="btn-fill">■ Fill</button>
     <button class="btn btn-mode btn-mark" id="btn-mark">✕ Mark</button>
+    <button class="btn" id="btn-fit">⤢ Fit</button>
     <button class="btn" id="btn-reset">↺ Reset</button>
   </div>
 
@@ -336,23 +339,52 @@ const CLUE_H  = 170;  // natural clue area height (matches --clue-h)
 const NATURAL_W = CLUE_W + SIZE * CELL + (SIZE + 1) * GAP;
 const NATURAL_H = CLUE_H + SIZE * CELL + (SIZE + 1) * GAP;
 
-// ── Scale-to-fit ──────────────────────────────────────────────
+// ── Scale / zoom / pan ────────────────────────────────────────
 const scaleEl = document.getElementById('puzzle-scale');
 const sizerEl = document.getElementById('puzzle-sizer');
-let   currentScale = 1;
 
+let fitScale    = 1;     // base scale that fits the puzzle to viewport width
+let userZoom    = 1;     // pinch zoom multiplier (1 = fit, >1 = zoomed in)
+let panX        = 0;     // translation in screen px (<= 0 when zoomed)
+let panY        = 0;
+let currentScale = 1;    // effective scale = fitScale * userZoom (used for hit-testing)
+
+const MAX_ZOOM = 4;
+
+// Viewport (clip box) dimensions in screen px
+function viewportW() { return NATURAL_W * fitScale; }
+function viewportH() { return NATURAL_H * fitScale; }
+
+// Keep pan within bounds so the puzzle can't be dragged off-screen
+function clampPan() {
+  const scaledW = NATURAL_W * currentScale;
+  const scaledH = NATURAL_H * currentScale;
+  const minX = Math.min(0, viewportW() - scaledW);
+  const minY = Math.min(0, viewportH() - scaledH);
+  panX = Math.min(0, Math.max(minX, panX));
+  panY = Math.min(0, Math.max(minY, panY));
+}
+
+function applyTransform() {
+  currentScale = fitScale * userZoom;
+  clampPan();
+  scaleEl.style.transform =
+    `translate(${panX}px, ${panY}px) scale(${currentScale})`;
+}
+
+// Recompute the fit scale (on load and on resize/orientation change)
 function applyScale() {
-  const sideMargin = 8;                       // breathing room on each side
+  const sideMargin = 8;
   const availW = window.innerWidth - sideMargin * 2;
-  const scale  = Math.min(1, availW / NATURAL_W);
-  currentScale = scale;
+  fitScale = Math.min(1, availW / NATURAL_W);
 
-  scaleEl.style.width     = NATURAL_W + 'px';
-  scaleEl.style.transform = `scale(${scale})`;
+  scaleEl.style.width = NATURAL_W + 'px';
 
-  // Size the flow-box (sizer) to the scaled dimensions; margin:auto centres it
-  sizerEl.style.height = Math.round(NATURAL_H * scale) + 'px';
-  sizerEl.style.width  = Math.round(NATURAL_W * scale) + 'px';
+  // The clip viewport is the fit-size box
+  sizerEl.style.width  = Math.round(viewportW()) + 'px';
+  sizerEl.style.height = Math.round(viewportH()) + 'px';
+
+  applyTransform();
 }
 
 window.addEventListener('resize', applyScale);
@@ -549,8 +581,14 @@ function setMode(m) {
 let dragAction   = null;  // 'set' | 'clear'
 let dragValue    = null;  // 1 | 2
 let lastDragKey  = null;
+let strokeStart  = 0;            // timestamp the current stroke began
+let strokeChanges = [];          // {r,c,prev} for undo-on-pinch
+const strokeKeys = new Set();    // cells already recorded this stroke
 
 function startDrag(r, c) {
+  strokeStart   = Date.now();
+  strokeChanges = [];
+  strokeKeys.clear();
   if (isGiven(r, c)) { dragAction = 'skip'; return; }
   const cur    = grid[r][c];
   const target = mode === 'fill' ? 1 : 2;
@@ -566,14 +604,32 @@ function commitCell(r, c) {
   const key = `${r},${c}`;
   if (key === lastDragKey) return;
   lastDragKey = key;
-  grid[r][c]  = dragAction === 'clear' ? 0 : dragValue;
+  if (!strokeKeys.has(key)) {
+    strokeKeys.add(key);
+    strokeChanges.push({ r, c, prev: grid[r][c] });
+  }
+  grid[r][c] = dragAction === 'clear' ? 0 : dragValue;
   renderCell(r, c);
   updateClueHighlights();
+}
+
+// Undo the current stroke (used when a 2nd finger turns it into a pinch)
+function revertStroke() {
+  for (const { r, c, prev } of strokeChanges) {
+    grid[r][c] = prev;
+    renderCell(r, c);
+  }
+  updateClueHighlights();
+  strokeChanges = [];
+  strokeKeys.clear();
+  dragAction = null;
 }
 
 function endDrag() {
   if (dragAction === null) return;
   dragAction = null;
+  strokeChanges = [];
+  strokeKeys.clear();
   saveState();
   if (checkWin()) showWin();
 }
@@ -598,12 +654,52 @@ document.addEventListener('mouseup', endDrag);
 
 // ── Touch events ──────────────────────────────────────────────
 /*
- * We prevent default on touchstart/touchmove so the page doesn't scroll
- * while the user is drawing on the grid. Scrolling outside the puzzle
- * is unaffected because these listeners are on #puzzle (touch-action:none).
+ * One finger  → draw / erase cells (with the existing drag logic).
+ * Two fingers → pinch to zoom and drag to pan, like a map.
+ *
+ * When a second finger lands, any draw that just started is reverted
+ * (if it began within 300ms) so the pinch doesn't leave stray marks.
  */
+let pinching   = false;
+let pinchStartDist = 0;
+let pinchStartZoom = 1;
+let pinchStartPan  = { x: 0, y: 0 };
+let pinchStartMid  = { x: 0, y: 0 };   // relative to sizer top-left
+
+function touchDist(t1, t2) {
+  const dx = t1.clientX - t2.clientX;
+  const dy = t1.clientY - t2.clientY;
+  return Math.hypot(dx, dy);
+}
+
+function touchMid(t1, t2) {
+  const rect = sizerEl.getBoundingClientRect();
+  return {
+    x: (t1.clientX + t2.clientX) / 2 - rect.left,
+    y: (t1.clientY + t2.clientY) / 2 - rect.top,
+  };
+}
+
+function beginPinch(e) {
+  // If a draw stroke just began, undo it — this was meant as a pinch
+  if (dragAction !== null) {
+    if (Date.now() - strokeStart < 300) revertStroke();
+    else endDrag();
+  }
+  pinching       = true;
+  pinchStartDist = touchDist(e.touches[0], e.touches[1]);
+  pinchStartZoom = userZoom;
+  pinchStartPan  = { x: panX, y: panY };
+  pinchStartMid  = touchMid(e.touches[0], e.touches[1]);
+}
+
 puzzleEl.addEventListener('touchstart', e => {
   e.preventDefault();
+  if (e.touches.length >= 2) {
+    beginPinch(e);
+    return;
+  }
+  // single finger → draw
   const t   = e.changedTouches[0];
   const pos = cellFromClient(t.clientX, t.clientY);
   if (!pos) return;
@@ -614,14 +710,53 @@ puzzleEl.addEventListener('touchstart', e => {
 
 puzzleEl.addEventListener('touchmove', e => {
   e.preventDefault();
+
+  // A second finger arrived mid-stroke → switch to pinch
+  if (!pinching && e.touches.length >= 2) {
+    beginPinch(e);
+    return;
+  }
+
+  if (pinching && e.touches.length >= 2) {
+    const dist = touchDist(e.touches[0], e.touches[1]);
+    const mid  = touchMid(e.touches[0], e.touches[1]);
+
+    // New zoom from the pinch ratio
+    const factor  = dist / pinchStartDist;
+    userZoom = Math.min(MAX_ZOOM, Math.max(1, pinchStartZoom * factor));
+
+    // Keep the content point under the original midpoint fixed,
+    // while also following the midpoint as it moves (= pan).
+    const sStart = fitScale * pinchStartZoom;
+    const sNow   = fitScale * userZoom;
+    const contentX = (pinchStartMid.x - pinchStartPan.x) / sStart;
+    const contentY = (pinchStartMid.y - pinchStartPan.y) / sStart;
+    panX = mid.x - contentX * sNow;
+    panY = mid.y - contentY * sNow;
+
+    applyTransform();
+    return;
+  }
+
+  // single finger → draw
   if (!dragAction) return;
   const t   = e.changedTouches[0];
   const pos = cellFromClient(t.clientX, t.clientY);
   if (pos) commitCell(pos.r, pos.c);
 }, { passive: false });
 
-document.addEventListener('touchend',    endDrag);
-document.addEventListener('touchcancel', endDrag);
+function onTouchEnd(e) {
+  // End pinch only when fewer than 2 fingers remain
+  if (pinching && (!e.touches || e.touches.length < 2)) {
+    pinching = false;
+    // If one finger is still down, don't start a new draw from it —
+    // wait for a fresh touchstart.
+  }
+  endDrag();
+}
+
+document.addEventListener('touchend',    onTouchEnd);
+document.addEventListener('touchcancel', onTouchEnd);
 
 // ── Reset ─────────────────────────────────────────────────────
 function resetPuzzle() {
@@ -634,6 +769,14 @@ function resetPuzzle() {
 
 document.getElementById('btn-reset').addEventListener('click', () => {
   if (confirm('Reset the puzzle?')) resetPuzzle();
+});
+
+// Reset zoom & pan back to the fitted view
+document.getElementById('btn-fit').addEventListener('click', () => {
+  userZoom = 1;
+  panX = 0;
+  panY = 0;
+  applyTransform();
 });
 
 // ── Win ───────────────────────────────────────────────────────
