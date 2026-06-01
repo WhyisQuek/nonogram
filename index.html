@@ -225,8 +225,8 @@
 
     /* given / pre-filled clue cells */
     .cell.given {
-      background: var(--accent);
-      border-color: var(--accent);
+      background: #d8d2c4;
+      border-color: #d8d2c4;
       cursor: default;
     }
 
@@ -287,8 +287,18 @@
       flex-shrink: 0;
     }
     .swatch-filled { background: var(--filled); }
-    .swatch-given  { background: var(--accent); }
-    .swatch-marked { background: var(--marked); }
+    .swatch-given  { background: #d8d2c4; }
+    .swatch-marked { background: var(--marked); position: relative; overflow: hidden; }
+    .swatch-marked::before,
+    .swatch-marked::after {
+      content: '';
+      position: absolute;
+      inset: 20% 46%;
+      background: #888;
+      border-radius: 1px;
+    }
+    .swatch-marked::before { transform: rotate(45deg); }
+    .swatch-marked::after  { transform: rotate(-45deg); }
     .swatch-empty  { background: var(--surface); }
   </style>
 </head>
@@ -315,7 +325,7 @@
   <div id="legend">
     <div class="legend-item"><div class="legend-swatch swatch-filled"></div>Filled</div>
     <div class="legend-item"><div class="legend-swatch swatch-given"></div>Given</div>
-    <div class="legend-item"><div class="legend-swatch swatch-marked"></div>Marked ✕</div>
+    <div class="legend-item"><div class="legend-swatch swatch-marked"></div>Marked</div>
     <div class="legend-item"><div class="legend-swatch swatch-empty"></div>Empty</div>
   </div>
 </div>
