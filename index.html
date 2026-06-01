@@ -25,8 +25,8 @@
       --clue-bg:   #141414;
       --win-glow:  #c8a96e;
       --cell:      clamp(22px, 4.2vw, 34px);
-      --clue-w:    clamp(38px, 8vw, 64px);
-      --clue-h:    clamp(38px, 8vw, 64px);
+      --clue-w:    clamp(100px, 18vw, 160px);
+      --clue-h:    clamp(100px, 18vw, 160px);
       --gap:       1px;
     }
 
@@ -147,8 +147,8 @@
       flex-direction: column;
       align-items: center;
       justify-content: flex-end;
-      padding: 4px 2px;
-      gap: 1px;
+      padding: 6px 2px;
+      gap: 3px;
       border-bottom: 2px solid var(--border-hi);
     }
 
@@ -159,13 +159,13 @@
       flex-direction: row;
       align-items: center;
       justify-content: flex-end;
-      padding: 2px 4px;
-      gap: 2px;
+      padding: 2px 8px;
+      gap: 4px;
       border-right: 2px solid var(--border-hi);
     }
 
     .clue-num {
-      font-size: clamp(7px, 1.4vw, 11px);
+      font-size: clamp(9px, 1.8vw, 13px);
       color: var(--text);
       line-height: 1;
       min-width: 1ch;
@@ -211,6 +211,14 @@
     /* section grid lines */
     .cell.sec-col { border-left: 2px solid var(--border-hi); }
     .cell.sec-row { border-top: 2px solid var(--border-hi); }
+
+    /* given / pre-filled clue cells */
+    .cell.given {
+      background: var(--accent);
+      border-color: var(--accent);
+      cursor: default;
+    }
+    .cell.given:active { opacity: 1; }
 
     /* clue done */
     .clue-done .clue-num { color: var(--text-dim); }
@@ -278,6 +286,7 @@
       flex-shrink: 0;
     }
     .swatch-filled  { background: var(--filled); }
+    .swatch-given   { background: var(--accent); }
     .swatch-marked  { background: var(--marked); }
     .swatch-empty   { background: var(--surface); }
   </style>
@@ -303,6 +312,7 @@
 
   <div id="legend">
     <div class="legend-item"><div class="legend-swatch swatch-filled"></div>Filled</div>
+    <div class="legend-item"><div class="legend-swatch swatch-given"></div>Given</div>
     <div class="legend-item"><div class="legend-swatch swatch-marked"></div>Marked ✕</div>
     <div class="legend-item"><div class="legend-swatch swatch-empty"></div>Empty</div>
   </div>
@@ -319,6 +329,10 @@
 <script>
 // ── Helpers ──────────────────────────────────────────────────
 const SIZE = 21;
+
+// Build a fast lookup set for given cells: "r,c"
+const GIVENS = new Set((PUZZLE_CONFIG.givens || []).map(([r, c]) => `${r},${c}`));
+function isGiven(r, c) { return GIVENS.has(`${r},${c}`); }
 
 function getRunsFromRow(cells) {
   const runs = [];
@@ -425,6 +439,11 @@ function buildGrid() {
 // ── Render ─────────────────────────────────────────────────────
 function renderCell(r, c) {
   const el = cellEls[r][c];
+  if (isGiven(r, c)) {
+    el.classList.add('given');
+    el.classList.remove('filled', 'marked');
+    return;
+  }
   const v = grid[r][c];
   el.classList.toggle('filled', v === 1);
   el.classList.toggle('marked', v === 2);
@@ -440,13 +459,13 @@ function renderAll() {
 function updateClueHighlights() {
   // rows
   for (let r = 0; r < SIZE; r++) {
-    const row = Array.from({ length: SIZE }, (_, c) => grid[r][c] === 1 ? 1 : 0);
+    const row = Array.from({ length: SIZE }, (_, c) => (grid[r][c] === 1 || isGiven(r, c)) ? 1 : 0);
     const done = runsMatch(getRunsFromRow(row), PUZZLE_CONFIG.rows[r]);
     rowClueEls[r].classList.toggle('clue-done', done);
   }
   // cols
   for (let c = 0; c < SIZE; c++) {
-    const col = Array.from({ length: SIZE }, (_, r) => grid[r][c] === 1 ? 1 : 0);
+    const col = Array.from({ length: SIZE }, (_, r) => (grid[r][c] === 1 || isGiven(r, c)) ? 1 : 0);
     const done = runsMatch(getRunsFromRow(col), PUZZLE_CONFIG.cols[c]);
     colClueEls[c].classList.toggle('clue-done', done);
   }
@@ -454,11 +473,11 @@ function updateClueHighlights() {
 
 function checkWin() {
   for (let r = 0; r < SIZE; r++) {
-    const row = Array.from({ length: SIZE }, (_, c) => grid[r][c] === 1 ? 1 : 0);
+    const row = Array.from({ length: SIZE }, (_, c) => (grid[r][c] === 1 || isGiven(r, c)) ? 1 : 0);
     if (!runsMatch(getRunsFromRow(row), PUZZLE_CONFIG.rows[r])) return false;
   }
   for (let c = 0; c < SIZE; c++) {
-    const col = Array.from({ length: SIZE }, (_, r) => grid[r][c] === 1 ? 1 : 0);
+    const col = Array.from({ length: SIZE }, (_, r) => (grid[r][c] === 1 || isGiven(r, c)) ? 1 : 0);
     if (!runsMatch(getRunsFromRow(col), PUZZLE_CONFIG.cols[c])) return false;
   }
   return true;
@@ -484,6 +503,7 @@ let dragValue  = null; // what value we're writing
 let lastDragCell = null;
 
 function applyToCell(r, c) {
+  if (isGiven(r, c)) return; // never modify a given
   const key = `${r},${c}`;
   if (key === lastDragCell) return;
   lastDragCell = key;
@@ -577,7 +597,9 @@ document.addEventListener('touchend', () => {
 
 // ── Reset ─────────────────────────────────────────────────────
 function resetPuzzle() {
-  for (let r = 0; r < SIZE; r++) grid[r].fill(0);
+  for (let r = 0; r < SIZE; r++)
+    for (let c = 0; c < SIZE; c++)
+      if (!isGiven(r, c)) grid[r][c] = 0;
   renderAll();
   document.getElementById('status').textContent = '';
   try { localStorage.removeItem(STORAGE_KEY); } catch {}
