@@ -27,8 +27,8 @@
 
       /* Natural (unscaled) sizes — JS will apply a scale transform */
       --cell:    28px;
-      --clue-w:  112px;   /* 4 × cell — fits 8 numbers comfortably */
-      --clue-h:  112px;
+      --clue-w:  120px;   /* fits up to 8 numbers across a row clue */
+      --clue-h:  136px;   /* fits up to 8 numbers stacked in a column clue */
       --gap:     1px;
     }
 
@@ -116,21 +116,20 @@
 
     /* ── Puzzle scale wrapper ────────────────────────────────── */
     /*
-     * #puzzle-scale wraps the grid and is the element we CSS-transform.
-     * JS sets --scale on it; transform-origin is top-center so it
-     * stays horizontally centred after scaling.
-     * The outer #puzzle-sizer gives it the correct height in document
-     * flow (since transform doesn't affect layout).
+     * #puzzle-scale is the element we CSS-transform with scale().
+     * Using transform-origin: top left means the scaled box occupies
+     * exactly [0 .. NATURAL_W*scale] horizontally, so the surrounding
+     * #puzzle-sizer (sized by JS to the scaled dimensions and centred
+     * with margin:auto) keeps everything perfectly centred.
      */
     #puzzle-sizer {
-      width: 100%;
-      /* height set by JS to naturalHeight * scale */
+      margin: 0 auto;
+      /* width & height set by JS to natural size × scale */
     }
 
     #puzzle-scale {
-      transform-origin: top center;
-      /* transform: scale(var(--scale)) set by JS */
-      /* width = naturalWidth, set by JS */
+      transform-origin: top left;
+      /* transform: scale(...) and width set by JS */
     }
 
     /* ── Puzzle grid ─────────────────────────────────────────── */
@@ -330,8 +329,8 @@
 const SIZE    = 21;
 const CELL    = 28;   // natural cell size in px (matches --cell CSS var)
 const GAP     = 1;
-const CLUE_W  = 112;  // natural clue area width  (matches --clue-w)
-const CLUE_H  = 112;  // natural clue area height (matches --clue-h)
+const CLUE_W  = 120;  // natural clue area width  (matches --clue-w)
+const CLUE_H  = 136;  // natural clue area height (matches --clue-h)
 
 // Natural pixel dimensions of the whole puzzle grid element
 const NATURAL_W = CLUE_W + SIZE * CELL + (SIZE + 1) * GAP;
@@ -343,16 +342,16 @@ const sizerEl = document.getElementById('puzzle-sizer');
 let   currentScale = 1;
 
 function applyScale() {
-  const availW = window.innerWidth;          // full viewport width
+  const sideMargin = 8;                       // breathing room on each side
+  const availW = window.innerWidth - sideMargin * 2;
   const scale  = Math.min(1, availW / NATURAL_W);
   currentScale = scale;
 
   scaleEl.style.width     = NATURAL_W + 'px';
   scaleEl.style.transform = `scale(${scale})`;
 
-  // Give the sizer the correct height so the page doesn't collapse
+  // Size the flow-box (sizer) to the scaled dimensions; margin:auto centres it
   sizerEl.style.height = Math.round(NATURAL_H * scale) + 'px';
-  // And correct width so it centres properly
   sizerEl.style.width  = Math.round(NATURAL_W * scale) + 'px';
 }
 
