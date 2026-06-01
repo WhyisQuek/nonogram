@@ -312,6 +312,7 @@
   <div id="toolbar">
     <button class="btn btn-mode active" id="btn-fill">■ Fill</button>
     <button class="btn btn-mode btn-mark" id="btn-mark">✕ Mark</button>
+    <button class="btn" id="btn-clear-marks">✕ Clear</button>
     <button class="btn" id="btn-fit">⤢ Fit</button>
     <button class="btn" id="btn-reset">↺ Reset</button>
   </div>
@@ -779,6 +780,15 @@ function resetPuzzle() {
 
 document.getElementById('btn-reset').addEventListener('click', () => {
   if (confirm('Reset the puzzle?')) resetPuzzle();
+});
+
+// Clear all ✕ marks without touching filled cells
+document.getElementById('btn-clear-marks').addEventListener('click', () => {
+  let hadAny = false;
+  for (let r = 0; r < SIZE; r++)
+    for (let c = 0; c < SIZE; c++)
+      if (grid[r][c] === 2) { grid[r][c] = 0; hadAny = true; }
+  if (hadAny) { renderAll(); saveState(); }
 });
 
 // Reset zoom & pan back to the fitted view
