@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Nonogram</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Reset & base ───────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f0f0f;
+      --surface:   #1a1a1a;
+      --border:    #2e2e2e;
+      --border-hi: #444;
+      --filled:    #e8e0d0;
+      --marked:    #3a3a3a;
+      --accent:    #c8a96e;
+      --accent2:   #7eb8c8;
+      --text:      #c8c0b0;
+      --text-dim:  #666;
+      --clue-bg:   #141414;
+      --win-glow:  #c8a96e;
+      --cell:      clamp(22px, 4.2vw, 34px);
+      --clue-w:    clamp(38px, 8vw, 64px);
+      --clue-h:    clamp(38px, 8vw, 64px);
+      --gap:       1px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      overflow-x: hidden;
+    }
+
+    /* ── Layout ─────────────────────────────────────────────── */
+    #app {
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 12px 40px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    header h1 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: clamp(1.5rem, 5vw, 2.4rem);
+      letter-spacing: -0.02em;
+      color: var(--filled);
+      line-height: 1;
+    }
+
+    header p {
+      margin-top: 4px;
+      font-size: 0.72rem;
+      color: var(--accent);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    /* ── Toolbar ─────────────────────────────────────────────── */
+    #toolbar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .btn {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 8px 16px;
+      border-radius: 2px;
+      border: 1px solid var(--border-hi);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active { background: var(--border-hi); }
+
+    .btn-mode {
+      border-color: var(--border);
+      color: var(--text-dim);
+    }
+    .btn-mode.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #1f1a10;
+    }
+    .btn-mark.active {
+      border-color: var(--accent2);
+      color: var(--accent2);
+      background: #101820;
+    }
+
+    /* ── Puzzle wrapper ──────────────────────────────────────── */
+    #puzzle-outer {
+      overflow-x: auto;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      max-width: 100%;
+      max-height: calc(100dvh - 160px);
+      padding-bottom: 4px;
+    }
+
+    #puzzle {
+      display: inline-grid;
+      /* columns: clue-column + 21 cell columns */
+      grid-template-columns: var(--clue-w) repeat(21, var(--cell));
+      grid-template-rows:    var(--clue-h) repeat(21, var(--cell));
+      gap: var(--gap);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: pan-x pan-y;
+    }
+
+    /* ── Corner ──────────────────────────────────────────────── */
+    .corner {
+      background: var(--bg);
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    /* ── Clue cells ──────────────────────────────────────────── */
+    .col-clue {
+      background: var(--clue-bg);
+      grid-row: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 4px 2px;
+      gap: 1px;
+      border-bottom: 2px solid var(--border-hi);
+    }
+
+    .row-clue {
+      background: var(--clue-bg);
+      grid-column: 1;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 2px 4px;
+      gap: 2px;
+      border-right: 2px solid var(--border-hi);
+    }
+
+    .clue-num {
+      font-size: clamp(7px, 1.4vw, 11px);
+      color: var(--text);
+      line-height: 1;
+      min-width: 1ch;
+      text-align: center;
+    }
+
+    /* section borders every 5 cells */
+    .col-clue.sec-start { border-left: 2px solid var(--border-hi); }
+    .row-clue.sec-start { border-top: 2px solid var(--border-hi); }
+
+    /* ── Grid cells ──────────────────────────────────────────── */
+    .cell {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.08s;
+      position: relative;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .cell:active { opacity: 0.7; }
+
+    .cell.filled {
+      background: var(--filled);
+      border-color: var(--filled);
+    }
+
+    /* X mark */
+    .cell.marked {
+      background: var(--marked);
+    }
+    .cell.marked::before,
+    .cell.marked::after {
+      content: '';
+      position: absolute;
+      inset: 20% 45%;
+      background: #666;
+      border-radius: 1px;
+    }
+    .cell.marked::before { transform: rotate(45deg); }
+    .cell.marked::after  { transform: rotate(-45deg); }
+
+    /* section grid lines */
+    .cell.sec-col { border-left: 2px solid var(--border-hi); }
+    .cell.sec-row { border-top: 2px solid var(--border-hi); }
+
+    /* clue done */
+    .clue-done .clue-num { color: var(--text-dim); }
+
+    /* ── Status bar ──────────────────────────────────────────── */
+    #status {
+      margin-top: 16px;
+      font-size: 0.68rem;
+      letter-spacing: 0.12em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      text-align: center;
+      min-height: 1.2em;
+      transition: color 0.3s;
+    }
+
+    /* ── Win overlay ─────────────────────────────────────────── */
+    #win-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.82);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+    }
+    #win-overlay.show {
+      display: flex;
+      animation: fadeIn 0.4s ease;
+    }
+    #win-overlay h2 {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(2rem, 8vw, 3.5rem);
+      font-weight: 800;
+      color: var(--win-glow);
+      text-shadow: 0 0 40px var(--win-glow);
+      letter-spacing: -0.02em;
+    }
+    #win-overlay p {
+      font-size: 0.8rem;
+      color: var(--text);
+      letter-spacing: 0.1em;
+    }
+    #win-overlay .btn { margin-top: 8px; }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* ── Legend ──────────────────────────────────────────────── */
+    #legend {
+      margin-top: 14px;
+      display: flex;
+      gap: 20px;
+      font-size: 0.64rem;
+      color: var(--text-dim);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .legend-swatch {
+      width: 14px; height: 14px;
+      border-radius: 2px;
+      border: 1px solid var(--border-hi);
+      flex-shrink: 0;
+    }
+    .swatch-filled  { background: var(--filled); }
+    .swatch-marked  { background: var(--marked); }
+    .swatch-empty   { background: var(--surface); }
+  </style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1 id="title-el">Nonogram</h1>
+    <p id="subtitle-el"></p>
+  </header>
+
+  <div id="toolbar">
+    <button class="btn btn-mode active" id="btn-fill">■ Fill</button>
+    <button class="btn btn-mode btn-mark" id="btn-mark">✕ Mark</button>
+    <button class="btn" id="btn-reset">↺ Reset</button>
+  </div>
+
+  <div id="puzzle-outer">
+    <div id="puzzle"></div>
+  </div>
+
+  <div id="status"></div>
+
+  <div id="legend">
+    <div class="legend-item"><div class="legend-swatch swatch-filled"></div>Filled</div>
+    <div class="legend-item"><div class="legend-swatch swatch-marked"></div>Marked ✕</div>
+    <div class="legend-item"><div class="legend-swatch swatch-empty"></div>Empty</div>
+  </div>
+</div>
+
+<div id="win-overlay">
+  <h2>Solved! ✓</h2>
+  <p>Puzzle complete — well done.</p>
+  <button class="btn" id="btn-win-reset">Play again</button>
+</div>
+
+<!-- Load config first, then app logic -->
+<script src="puzzle.js"></script>
+<script>
+// ── Helpers ──────────────────────────────────────────────────
+const SIZE = 21;
+
+function getRunsFromRow(cells) {
+  const runs = [];
+  let count = 0;
+  for (const c of cells) {
+    if (c) { count++; }
+    else if (count) { runs.push(count); count = 0; }
+  }
+  if (count) runs.push(count);
+  return runs.length ? runs : [0];
+}
+
+function runsMatch(a, b) {
+  if (a.length !== b.length) return false;
+  return a.every((v, i) => v === b[i]);
+}
+
+// ── State ─────────────────────────────────────────────────────
+// 0 = empty, 1 = filled, 2 = marked(X)
+const grid = Array.from({ length: SIZE }, () => new Uint8Array(SIZE));
+
+const STORAGE_KEY = `nonogram-${PUZZLE_CONFIG.title}-${PUZZLE_CONFIG.subtitle}`;
+
+function saveState() {
+  const flat = [];
+  for (let r = 0; r < SIZE; r++)
+    for (let c = 0; c < SIZE; c++)
+      flat.push(grid[r][c]);
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(flat)); } catch {}
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const flat = JSON.parse(raw);
+    for (let r = 0; r < SIZE; r++)
+      for (let c = 0; c < SIZE; c++)
+        grid[r][c] = flat[r * SIZE + c] || 0;
+  } catch {}
+}
+
+// ── Build DOM ─────────────────────────────────────────────────
+const puzzleEl = document.getElementById('puzzle');
+
+// cell element references [row][col]
+const cellEls = Array.from({ length: SIZE }, () => new Array(SIZE));
+// clue elements
+const rowClueEls = new Array(SIZE);
+const colClueEls = new Array(SIZE);
+
+function buildGrid() {
+  puzzleEl.innerHTML = '';
+
+  // Corner
+  const corner = document.createElement('div');
+  corner.className = 'corner';
+  puzzleEl.appendChild(corner);
+
+  // Column clues (row 1)
+  for (let c = 0; c < SIZE; c++) {
+    const div = document.createElement('div');
+    div.className = 'col-clue' + (c % 5 === 0 ? ' sec-start' : '');
+    const clues = PUZZLE_CONFIG.cols[c];
+    clues.forEach(n => {
+      const span = document.createElement('span');
+      span.className = 'clue-num';
+      span.textContent = n;
+      div.appendChild(span);
+    });
+    colClueEls[c] = div;
+    puzzleEl.appendChild(div);
+  }
+
+  // Row clues + cells
+  for (let r = 0; r < SIZE; r++) {
+    // row clue
+    const rDiv = document.createElement('div');
+    rDiv.className = 'row-clue' + (r % 5 === 0 ? ' sec-start' : '');
+    const rClues = PUZZLE_CONFIG.rows[r];
+    rClues.forEach(n => {
+      const span = document.createElement('span');
+      span.className = 'clue-num';
+      span.textContent = n;
+      rDiv.appendChild(span);
+    });
+    rowClueEls[r] = rDiv;
+    puzzleEl.appendChild(rDiv);
+
+    // cells
+    for (let c = 0; c < SIZE; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell'
+        + (c % 5 === 0 ? ' sec-col' : '')
+        + (r % 5 === 0 ? ' sec-row' : '');
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+      cellEls[r][c] = cell;
+      puzzleEl.appendChild(cell);
+    }
+  }
+}
+
+// ── Render ─────────────────────────────────────────────────────
+function renderCell(r, c) {
+  const el = cellEls[r][c];
+  const v = grid[r][c];
+  el.classList.toggle('filled', v === 1);
+  el.classList.toggle('marked', v === 2);
+}
+
+function renderAll() {
+  for (let r = 0; r < SIZE; r++)
+    for (let c = 0; c < SIZE; c++)
+      renderCell(r, c);
+  updateClueHighlights();
+}
+
+function updateClueHighlights() {
+  // rows
+  for (let r = 0; r < SIZE; r++) {
+    const row = Array.from({ length: SIZE }, (_, c) => grid[r][c] === 1 ? 1 : 0);
+    const done = runsMatch(getRunsFromRow(row), PUZZLE_CONFIG.rows[r]);
+    rowClueEls[r].classList.toggle('clue-done', done);
+  }
+  // cols
+  for (let c = 0; c < SIZE; c++) {
+    const col = Array.from({ length: SIZE }, (_, r) => grid[r][c] === 1 ? 1 : 0);
+    const done = runsMatch(getRunsFromRow(col), PUZZLE_CONFIG.cols[c]);
+    colClueEls[c].classList.toggle('clue-done', done);
+  }
+}
+
+function checkWin() {
+  for (let r = 0; r < SIZE; r++) {
+    const row = Array.from({ length: SIZE }, (_, c) => grid[r][c] === 1 ? 1 : 0);
+    if (!runsMatch(getRunsFromRow(row), PUZZLE_CONFIG.rows[r])) return false;
+  }
+  for (let c = 0; c < SIZE; c++) {
+    const col = Array.from({ length: SIZE }, (_, r) => grid[r][c] === 1 ? 1 : 0);
+    if (!runsMatch(getRunsFromRow(col), PUZZLE_CONFIG.cols[c])) return false;
+  }
+  return true;
+}
+
+// ── Input mode ────────────────────────────────────────────────
+let mode = 'fill'; // 'fill' | 'mark'
+const btnFill = document.getElementById('btn-fill');
+const btnMark = document.getElementById('btn-mark');
+
+btnFill.addEventListener('click', () => setMode('fill'));
+btnMark.addEventListener('click', () => setMode('mark'));
+
+function setMode(m) {
+  mode = m;
+  btnFill.classList.toggle('active', m === 'fill');
+  btnMark.classList.toggle('active', m === 'mark');
+}
+
+// ── Pointer interaction ───────────────────────────────────────
+let dragAction = null; // what we're doing in this drag: 'set'|'clear'
+let dragValue  = null; // what value we're writing
+let lastDragCell = null;
+
+function applyToCell(r, c) {
+  const key = `${r},${c}`;
+  if (key === lastDragCell) return;
+  lastDragCell = key;
+
+  if (dragAction === 'clear') {
+    grid[r][c] = 0;
+  } else {
+    grid[r][c] = dragValue;
+  }
+  renderCell(r, c);
+  updateClueHighlights();
+}
+
+function cellFromEvent(e) {
+  let el = e.target;
+  if (!el.dataset.r) {
+    // touch: find element under finger
+    if (e.touches) {
+      const t = e.touches[0];
+      el = document.elementFromPoint(t.clientX, t.clientY);
+    }
+  }
+  if (!el || !el.dataset.r) return null;
+  return { r: +el.dataset.r, c: +el.dataset.c };
+}
+
+puzzleEl.addEventListener('mousedown', e => {
+  const pos = cellFromEvent(e);
+  if (!pos) return;
+  e.preventDefault();
+  const { r, c } = pos;
+  const cur = grid[r][c];
+  const target = mode === 'fill' ? 1 : 2;
+
+  if (cur === target) {
+    dragAction = 'clear';
+    dragValue = null;
+  } else {
+    dragAction = 'set';
+    dragValue = target;
+  }
+  lastDragCell = null;
+  applyToCell(r, c);
+  saveState();
+  if (checkWin()) showWin();
+});
+
+puzzleEl.addEventListener('mousemove', e => {
+  if (dragAction === null) return;
+  const pos = cellFromEvent(e);
+  if (!pos) return;
+  applyToCell(pos.r, pos.c);
+});
+
+document.addEventListener('mouseup', () => {
+  if (dragAction !== null) {
+    dragAction = null;
+    saveState();
+    if (checkWin()) showWin();
+  }
+});
+
+puzzleEl.addEventListener('touchstart', e => {
+  const pos = cellFromEvent(e);
+  if (!pos) return;
+  e.preventDefault();
+  const { r, c } = pos;
+  const cur = grid[r][c];
+  const target = mode === 'fill' ? 1 : 2;
+  dragAction = cur === target ? 'clear' : 'set';
+  dragValue = target;
+  lastDragCell = null;
+  applyToCell(r, c);
+}, { passive: false });
+
+puzzleEl.addEventListener('touchmove', e => {
+  if (dragAction === null) return;
+  e.preventDefault();
+  const pos = cellFromEvent(e);
+  if (!pos) return;
+  applyToCell(pos.r, pos.c);
+}, { passive: false });
+
+document.addEventListener('touchend', () => {
+  if (dragAction !== null) {
+    dragAction = null;
+    saveState();
+    if (checkWin()) showWin();
+  }
+});
+
+// ── Reset ─────────────────────────────────────────────────────
+function resetPuzzle() {
+  for (let r = 0; r < SIZE; r++) grid[r].fill(0);
+  renderAll();
+  document.getElementById('status').textContent = '';
+  try { localStorage.removeItem(STORAGE_KEY); } catch {}
+}
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  if (confirm('Reset the puzzle?')) resetPuzzle();
+});
+
+// ── Win ───────────────────────────────────────────────────────
+function showWin() {
+  document.getElementById('win-overlay').classList.add('show');
+}
+
+document.getElementById('win-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('win-overlay') ||
+      e.target === document.getElementById('btn-win-reset')) {
+    document.getElementById('win-overlay').classList.remove('show');
+    if (e.target.id === 'btn-win-reset') resetPuzzle();
+  }
+});
+
+// ── Init ──────────────────────────────────────────────────────
+document.getElementById('title-el').textContent    = PUZZLE_CONFIG.title;
+document.getElementById('subtitle-el').textContent = PUZZLE_CONFIG.subtitle;
+document.title = PUZZLE_CONFIG.title;
+
+buildGrid();
+loadState();
+renderAll();
+</script>
+</body>
+</html>
