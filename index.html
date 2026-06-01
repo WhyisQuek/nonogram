@@ -14,8 +14,8 @@
     :root {
       --bg:        #0f0f0f;
       --surface:   #1a1a1a;
-      --border:    #2e2e2e;
-      --border-hi: #444;
+      --border:    #6b6560;
+      --border-hi: #8c857c;
       --filled:    #e8e0d0;
       --marked:    #3a3a3a;
       --accent:    #c8a96e;
@@ -334,7 +334,7 @@
 <div id="win-overlay">
   <h2>Solved! ✓</h2>
   <p>Puzzle complete — well done.</p>
-  <button class="btn" id="btn-win-reset">Play again</button>
+  <button class="btn" id="btn-win-ok">OK</button>
 </div>
 
 <script src="puzzle.js"></script>
@@ -801,15 +801,22 @@ document.getElementById('btn-fit').addEventListener('click', () => {
 
 // ── Win ───────────────────────────────────────────────────────
 function showWin() {
+  // Auto-clear all marks so the completed image is clean
+  let changed = false;
+  for (let r = 0; r < SIZE; r++)
+    for (let c = 0; c < SIZE; c++)
+      if (grid[r][c] === 2) { grid[r][c] = 0; changed = true; }
+  if (changed) { renderAll(); saveState(); }
   document.getElementById('win-overlay').classList.add('show');
 }
 
+function dismissWin() {
+  document.getElementById('win-overlay').classList.remove('show');
+}
+
+document.getElementById('btn-win-ok').addEventListener('click', dismissWin);
 document.getElementById('win-overlay').addEventListener('click', e => {
-  const overlay = document.getElementById('win-overlay');
-  if (e.target === overlay || e.target.id === 'btn-win-reset') {
-    overlay.classList.remove('show');
-    if (e.target.id === 'btn-win-reset') resetPuzzle();
-  }
+  if (e.target === document.getElementById('win-overlay')) dismissWin();
 });
 
 // ── Init ──────────────────────────────────────────────────────
