@@ -27,8 +27,8 @@
 
       /* Natural (unscaled) sizes — JS will apply a scale transform */
       --cell:    28px;
-      --clue-w:  120px;   /* fits up to 8 numbers across a row clue */
-      --clue-h:  136px;   /* fits up to 8 numbers stacked in a column clue */
+      --clue-w:  140px;   /* fits up to 8 spaced-out numbers across a row clue */
+      --clue-h:  170px;   /* fits up to 8 spaced-out numbers stacked in a column clue */
       --gap:     1px;
     }
 
@@ -161,8 +161,8 @@
       flex-direction: column;
       align-items: center;
       justify-content: flex-end;
-      padding: 6px 2px;
-      gap: 3px;
+      padding: 10px 2px;
+      gap: 9px;
       border-bottom: 2px solid var(--border-hi);
     }
 
@@ -173,8 +173,8 @@
       flex-direction: row;
       align-items: center;
       justify-content: flex-end;
-      padding: 2px 6px;
-      gap: 3px;
+      padding: 2px 10px;
+      gap: 9px;
       border-right: 2px solid var(--border-hi);
     }
 
@@ -329,8 +329,8 @@
 const SIZE    = 21;
 const CELL    = 28;   // natural cell size in px (matches --cell CSS var)
 const GAP     = 1;
-const CLUE_W  = 120;  // natural clue area width  (matches --clue-w)
-const CLUE_H  = 136;  // natural clue area height (matches --clue-h)
+const CLUE_W  = 140;  // natural clue area width  (matches --clue-w)
+const CLUE_H  = 170;  // natural clue area height (matches --clue-h)
 
 // Natural pixel dimensions of the whole puzzle grid element
 const NATURAL_W = CLUE_W + SIZE * CELL + (SIZE + 1) * GAP;
