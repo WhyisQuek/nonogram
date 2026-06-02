@@ -233,6 +233,46 @@
     /* clue done */
     .clue-done .clue-num { color: var(--text-dim); }
 
+    /* ── Hide-grid mode ──────────────────────────────────────── */
+    #puzzle.hide-grid {
+      gap: 0;
+      border-color: transparent;
+      grid-template-columns: 0px repeat(21, var(--cell));
+      grid-template-rows:    0px repeat(21, var(--cell));
+    }
+
+    /* collapse clue strips to zero */
+    #puzzle.hide-grid .corner,
+    #puzzle.hide-grid .col-clue,
+    #puzzle.hide-grid .row-clue {
+      display: none;
+    }
+
+    /* all cells: no border, flush together */
+    #puzzle.hide-grid .cell {
+      border: none;
+    }
+
+    /* filled + given: solid block, no seam */
+    #puzzle.hide-grid .cell.filled {
+      background: var(--filled);
+    }
+    #puzzle.hide-grid .cell.given {
+      background: #d8d2c4;
+    }
+
+    /* empty + marked: invisible — blend into background */
+    #puzzle.hide-grid .cell:not(.filled):not(.given) {
+      background: var(--bg);
+    }
+
+    /* active btn state for hide-grid toggle */
+    #btn-hide-grid.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #1f1a10;
+    }
+
     /* ── Win overlay ─────────────────────────────────────────── */
     #win-overlay {
       display: none;
@@ -313,6 +353,7 @@
     <button class="btn btn-mode active" id="btn-fill">■ Fill</button>
     <button class="btn btn-mode btn-mark" id="btn-mark">✕ Mark</button>
     <button class="btn" id="btn-clear-marks">✕ Clear</button>
+    <button class="btn" id="btn-hide-grid">▦ Hide Grid</button>
     <button class="btn" id="btn-fit">⤢ Fit</button>
     <button class="btn" id="btn-reset">↺ Reset</button>
   </div>
@@ -346,9 +387,9 @@ const GAP     = 1;
 const CLUE_W  = 140;  // natural clue area width  (matches --clue-w)
 const CLUE_H  = 170;  // natural clue area height (matches --clue-h)
 
-// Natural pixel dimensions of the whole puzzle grid element
-const NATURAL_W = CLUE_W + SIZE * CELL + (SIZE + 1) * GAP;
-const NATURAL_H = CLUE_H + SIZE * CELL + (SIZE + 1) * GAP;
+// Natural pixel dimensions — depend on whether grid is hidden
+function naturalW() { return (gridHidden ? 0 : CLUE_W) + SIZE * CELL + (gridHidden ? 0 : (SIZE + 1) * GAP); }
+function naturalH() { return (gridHidden ? 0 : CLUE_H) + SIZE * CELL + (gridHidden ? 0 : (SIZE + 1) * GAP); }
 
 // ── Scale / zoom / pan ────────────────────────────────────────
 const scaleEl = document.getElementById('puzzle-scale');
@@ -359,17 +400,18 @@ let userZoom    = 1;     // pinch zoom multiplier (1 = fit, >1 = zoomed in)
 let panX        = 0;     // translation in screen px (<= 0 when zoomed)
 let panY        = 0;
 let currentScale = 1;    // effective scale = fitScale * userZoom (used for hit-testing)
+let gridHidden  = false; // whether hide-grid mode is active
 
 const MAX_ZOOM = 4;
 
 // Viewport (clip box) dimensions in screen px
-function viewportW() { return NATURAL_W * fitScale; }
-function viewportH() { return NATURAL_H * fitScale; }
+function viewportW() { return naturalW() * fitScale; }
+function viewportH() { return naturalH() * fitScale; }
 
 // Keep pan within bounds so the puzzle can't be dragged off-screen
 function clampPan() {
-  const scaledW = NATURAL_W * currentScale;
-  const scaledH = NATURAL_H * currentScale;
+  const scaledW = naturalW() * currentScale;
+  const scaledH = naturalH() * currentScale;
   const minX = Math.min(0, viewportW() - scaledW);
   const minY = Math.min(0, viewportH() - scaledH);
   panX = Math.min(0, Math.max(minX, panX));
@@ -387,9 +429,9 @@ function applyTransform() {
 function applyScale() {
   const sideMargin = 8;
   const availW = window.innerWidth - sideMargin * 2;
-  fitScale = Math.min(1, availW / NATURAL_W);
+  fitScale = Math.min(1, availW / naturalW());
 
-  scaleEl.style.width = NATURAL_W + 'px';
+  scaleEl.style.width = naturalW() + 'px';
 
   // The clip viewport is the fit-size box
   sizerEl.style.width  = Math.round(viewportW()) + 'px';
@@ -561,14 +603,18 @@ function cellFromClient(clientX, clientY) {
   const x = (clientX - rect.left)  / scale;
   const y = (clientY - rect.top)   / scale;
 
-  // Subtract the clue strip (+ 1px border + gap)
-  const xCell = x - CLUE_W - GAP;
-  const yCell = y - CLUE_H - GAP;
+  // Subtract the clue strip (+ 1px border + gap) — zero when grid is hidden
+  const clueOffX = gridHidden ? 0 : CLUE_W + GAP;
+  const clueOffY = gridHidden ? 0 : CLUE_H + GAP;
+  const cellStep = gridHidden ? CELL : CELL + GAP;
+
+  const xCell = x - clueOffX;
+  const yCell = y - clueOffY;
 
   if (xCell < 0 || yCell < 0) return null;
 
-  const col = Math.floor(xCell / (CELL + GAP));
-  const row = Math.floor(yCell / (CELL + GAP));
+  const col = Math.floor(xCell / cellStep);
+  const row = Math.floor(yCell / cellStep);
 
   if (col < 0 || col >= SIZE || row < 0 || row >= SIZE) return null;
   return { r: row, c: col };
@@ -797,6 +843,17 @@ document.getElementById('btn-fit').addEventListener('click', () => {
   panX = 0;
   panY = 0;
   applyTransform();
+});
+
+// Toggle hide-grid mode
+const btnHideGrid = document.getElementById('btn-hide-grid');
+btnHideGrid.addEventListener('click', () => {
+  gridHidden = !gridHidden;
+  puzzleEl.classList.toggle('hide-grid', gridHidden);
+  btnHideGrid.classList.toggle('active', gridHidden);
+  btnHideGrid.textContent = gridHidden ? '▦ Show Grid' : '▦ Hide Grid';
+  // Recalculate sizer height — grid shrinks when clue strips collapse
+  applyScale();
 });
 
 // ── Win ───────────────────────────────────────────────────────
