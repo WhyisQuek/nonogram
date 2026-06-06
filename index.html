@@ -27,8 +27,8 @@
 
       /* Natural (unscaled) sizes — JS will apply a scale transform */
       --cell:    28px;
-      --clue-w:  140px;   /* fits up to 8 spaced-out numbers across a row clue */
-      --clue-h:  170px;   /* fits up to 8 spaced-out numbers stacked in a column clue */
+      --clue-w:  104px;   /* fits up to 4 numbers across a row clue */
+      --clue-h:  104px;   /* fits up to 4 numbers stacked in a column clue */
       --gap:     1px;
     }
 
@@ -137,8 +137,7 @@
     /* ── Puzzle grid ─────────────────────────────────────────── */
     #puzzle {
       display: inline-grid;
-      grid-template-columns: var(--clue-w) repeat(21, var(--cell));
-      grid-template-rows:    var(--clue-h) repeat(21, var(--cell));
+      /* grid-template set dynamically by JS from the nonogram region size */
       gap: var(--gap);
       background: var(--bg);
       border: 1px solid var(--border);
@@ -163,8 +162,8 @@
       flex-direction: column;
       align-items: center;
       justify-content: flex-end;
-      padding: 10px 2px;
-      gap: 9px;
+      padding: 8px 2px;
+      gap: 8px;
       border-bottom: 2px solid var(--border-hi);
     }
 
@@ -175,17 +174,25 @@
       flex-direction: row;
       align-items: center;
       justify-content: flex-end;
-      padding: 2px 10px;
-      gap: 9px;
+      padding: 2px 8px;
+      gap: 8px;
       border-right: 2px solid var(--border-hi);
     }
 
     .clue-num {
-      font-size: 11px;
+      font-size: 13px;
       color: var(--text);
       line-height: 1;
       min-width: 1ch;
       text-align: center;
+      transition: color 0.12s, opacity 0.12s;
+    }
+
+    /* individual clue numbers crossed off as their run is satisfied */
+    .clue-num.done {
+      color: var(--text-dim);
+      opacity: 0.4;
+      text-decoration: line-through;
     }
 
     /* section borders every 5 cells */
@@ -230,46 +237,41 @@
       cursor: default;
     }
 
-    /* clue done */
-    .clue-done .clue-num { color: var(--text-dim); }
-
-    /* ── Hide-grid mode ──────────────────────────────────────── */
-    #puzzle.hide-grid {
-      gap: 0;
-      border-color: transparent;
-      grid-template-columns: 0px repeat(21, var(--cell));
-      grid-template-rows:    0px repeat(21, var(--cell));
-    }
-
-    /* collapse clue strips to zero */
-    #puzzle.hide-grid .corner,
-    #puzzle.hide-grid .col-clue,
-    #puzzle.hide-grid .row-clue {
+    /* ── QR view ─────────────────────────────────────────────── */
+    #qr-view {
       display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 0 16px;
+      width: 100%;
+    }
+    body.qr-mode #qr-view { display: flex; }
+    body.qr-mode #puzzle-sizer,
+    body.qr-mode #legend,
+    body.qr-mode .draw-only { display: none; }
+
+    #qr-canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      border-radius: 6px;
+      max-width: 100%;
+      height: auto;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.5);
     }
 
-    /* all cells: no border, flush together */
-    #puzzle.hide-grid .cell {
-      border: none;
+    #qr-status {
+      font-size: 0.72rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      text-align: center;
+      min-height: 1.2em;
     }
+    #qr-status.complete { color: var(--accent); }
+    #qr-status.incomplete { color: var(--text-dim); }
 
-    /* filled + given: solid block, no seam — given matches filled in hide mode */
-    #puzzle.hide-grid .cell.filled {
-      background: var(--filled);
-      box-shadow: 0 0 0 0.75px var(--filled);
-    }
-    #puzzle.hide-grid .cell.given {
-      background: var(--filled);
-      box-shadow: 0 0 0 0.75px var(--filled);
-    }
-
-    /* empty + marked: invisible — blend into background */
-    #puzzle.hide-grid .cell:not(.filled):not(.given) {
-      background: var(--bg);
-    }
-
-    /* active btn state for hide-grid toggle */
-    #btn-hide-grid.active {
+    /* active btn state for the QR toggle */
+    #btn-check-qr.active {
       border-color: var(--accent);
       color: var(--accent);
       background: #1f1a10;
@@ -360,18 +362,23 @@
   </header>
 
   <div id="toolbar">
-    <button class="btn btn-mode active" id="btn-fill">■ Fill</button>
-    <button class="btn btn-mode btn-mark" id="btn-mark">✕ Mark</button>
-    <button class="btn" id="btn-clear-marks">✕ Clear</button>
-    <button class="btn" id="btn-hide-grid">▦ Hide Grid</button>
-    <button class="btn" id="btn-fit">⤢ Fit</button>
-    <button class="btn" id="btn-reset">↺ Reset</button>
+    <button class="btn btn-mode active draw-only" id="btn-fill">■ Fill</button>
+    <button class="btn btn-mode btn-mark draw-only" id="btn-mark">✕ Mark</button>
+    <button class="btn draw-only" id="btn-clear-marks">✕ Clear</button>
+    <button class="btn" id="btn-check-qr">▦ Check QR</button>
+    <button class="btn draw-only" id="btn-fit">⤢ Fit</button>
+    <button class="btn draw-only" id="btn-reset">↺ Reset</button>
   </div>
 
   <div id="puzzle-sizer">
     <div id="puzzle-scale">
       <div id="puzzle"></div>
     </div>
+  </div>
+
+  <div id="qr-view">
+    <canvas id="qr-canvas"></canvas>
+    <p id="qr-status"></p>
   </div>
 
   <div id="legend">
@@ -385,22 +392,31 @@
 <div id="win-overlay">
   <h2>Solved! ✓</h2>
   <p>Puzzle complete — well done.</p>
-  <p id="win-hint">Press <strong>▦ Hide Grid</strong> to reveal the image.</p>
+  <p id="win-hint">Press <strong>▦ Check QR</strong> to complete the code.</p>
   <button class="btn" id="btn-win-ok">OK</button>
 </div>
 
 <script src="puzzle.js"></script>
 <script>
 // ── Constants ─────────────────────────────────────────────────
-const SIZE    = 21;
-const CELL    = 28;   // natural cell size in px (matches --cell CSS var)
-const GAP     = 1;
-const CLUE_W  = 140;  // natural clue area width  (matches --clue-w)
-const CLUE_H  = 170;  // natural clue area height (matches --clue-h)
+// The nonogram is the region of the QR defined in PUZZLE_CONFIG.nonogram
+const NONO   = PUZZLE_CONFIG.nonogram;
+const ROWS   = NONO.height;   // = PUZZLE_CONFIG.rows.length
+const COLS   = NONO.width;    // = PUZZLE_CONFIG.cols.length
+const CELL   = 28;   // natural cell size in px (matches --cell CSS var)
+const GAP    = 1;
+const CLUE_W = 104;  // natural clue area width  (matches --clue-w)
+const CLUE_H = 104;  // natural clue area height (matches --clue-h)
 
-// Natural pixel dimensions — depend on whether grid is hidden
-function naturalW() { return (gridHidden ? 0 : CLUE_W) + SIZE * CELL + (gridHidden ? 0 : (SIZE + 1) * GAP); }
-function naturalH() { return (gridHidden ? 0 : CLUE_H) + SIZE * CELL + (gridHidden ? 0 : (SIZE + 1) * GAP); }
+// Natural pixel dimensions of the nonogram (with clue strips)
+function naturalW() { return CLUE_W + COLS * CELL + (COLS + 1) * GAP; }
+function naturalH() { return CLUE_H + ROWS * CELL + (ROWS + 1) * GAP; }
+
+// Apply the CSS grid-template to the puzzle element
+function applyGridTemplate() {
+  puzzleEl.style.gridTemplateColumns = `var(--clue-w) repeat(${COLS}, var(--cell))`;
+  puzzleEl.style.gridTemplateRows    = `var(--clue-h) repeat(${ROWS}, var(--cell))`;
+}
 
 // ── Scale / zoom / pan ────────────────────────────────────────
 const scaleEl = document.getElementById('puzzle-scale');
@@ -411,7 +427,6 @@ let userZoom    = 1;     // pinch zoom multiplier (1 = fit, >1 = zoomed in)
 let panX        = 0;     // translation in screen px (<= 0 when zoomed)
 let panY        = 0;
 let currentScale = 1;    // effective scale = fitScale * userZoom (used for hit-testing)
-let gridHidden  = false; // whether hide-grid mode is active
 
 const MAX_ZOOM = 4;
 
@@ -476,14 +491,14 @@ function runsMatch(a, b) {
 
 // ── State ─────────────────────────────────────────────────────
 // 0 = empty, 1 = filled, 2 = marked(X)
-const grid = Array.from({ length: SIZE }, () => new Uint8Array(SIZE));
+const grid = Array.from({ length: ROWS }, () => new Uint8Array(COLS));
 
 const STORAGE_KEY = `nonogram-${PUZZLE_CONFIG.title}-${PUZZLE_CONFIG.subtitle}`;
 
 function saveState() {
   const flat = [];
-  for (let r = 0; r < SIZE; r++)
-    for (let c = 0; c < SIZE; c++)
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
       flat.push(grid[r][c]);
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(flat)); } catch {}
 }
@@ -493,17 +508,17 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const flat = JSON.parse(raw);
-    for (let r = 0; r < SIZE; r++)
-      for (let c = 0; c < SIZE; c++)
-        grid[r][c] = flat[r * SIZE + c] || 0;
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        grid[r][c] = flat[r * COLS + c] || 0;
   } catch {}
 }
 
 // ── Build DOM ─────────────────────────────────────────────────
 const puzzleEl = document.getElementById('puzzle');
-const cellEls  = Array.from({ length: SIZE }, () => new Array(SIZE));
-const rowClueEls = new Array(SIZE);
-const colClueEls = new Array(SIZE);
+const cellEls  = Array.from({ length: ROWS }, () => new Array(COLS));
+const rowClueEls = new Array(ROWS);
+const colClueEls = new Array(COLS);
 
 function buildGrid() {
   puzzleEl.innerHTML = '';
@@ -515,8 +530,8 @@ function buildGrid() {
   corner.style.gridRow = '1';
   puzzleEl.appendChild(corner);
 
-  // Column clues (row 1, columns 2..22)
-  for (let c = 0; c < SIZE; c++) {
+  // Column clues (row 1, columns 2..COLS+1)
+  for (let c = 0; c < COLS; c++) {
     const div = document.createElement('div');
     div.className = 'col-clue' + (c % 5 === 0 ? ' sec-start' : '');
     div.style.gridColumn = (c + 2).toString();
@@ -532,8 +547,8 @@ function buildGrid() {
   }
 
   // Row clues + cells
-  for (let r = 0; r < SIZE; r++) {
-    // row clue (column 1, rows 2..22)
+  for (let r = 0; r < ROWS; r++) {
+    // row clue (column 1, rows 2..ROWS+1)
     const rDiv = document.createElement('div');
     rDiv.className = 'row-clue' + (r % 5 === 0 ? ' sec-start' : '');
     rDiv.style.gridColumn = '1';
@@ -547,7 +562,7 @@ function buildGrid() {
     rowClueEls[r] = rDiv;
     puzzleEl.appendChild(rDiv);
 
-    for (let c = 0; c < SIZE; c++) {
+    for (let c = 0; c < COLS; c++) {
       const cell = document.createElement('div');
       cell.className = 'cell'
         + (c % 5 === 0 ? ' sec-col' : '')
@@ -559,6 +574,8 @@ function buildGrid() {
       puzzleEl.appendChild(cell);
     }
   }
+
+  applyGridTemplate();
 }
 
 // ── Render ─────────────────────────────────────────────────────
@@ -575,30 +592,93 @@ function renderCell(r, c) {
 }
 
 function renderAll() {
-  for (let r = 0; r < SIZE; r++)
-    for (let c = 0; c < SIZE; c++)
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
       renderCell(r, c);
   updateClueHighlights();
 }
 
-function updateClueHighlights() {
-  for (let r = 0; r < SIZE; r++) {
-    const row = Array.from({ length: SIZE }, (_, c) => (grid[r][c] === 1 || isGiven(r, c)) ? 1 : 0);
-    rowClueEls[r].classList.toggle('clue-done', runsMatch(getRunsFromRow(row), PUZZLE_CONFIG.rows[r]));
+// Compute, for one line, which clue numbers can be confidently crossed off.
+// Returns a boolean[] aligned to `clue`.
+//
+// Position-aware: each completed run is matched to a clue only if it sits where
+// that clue could actually go. Left-anchored runs are matched from the left and
+// must leave room on their right for the remaining clues; right-anchored runs
+// likewise from the right. This avoids crossing off the wrong number when two
+// clues share a length (e.g. a half-finished "3" won't be mistaken for a "2").
+function clueDoneFlags(vals, clue) {
+  const n = clue.length;
+  const len = vals.length;
+  const flags = new Array(n).fill(false);
+
+  // Build filled runs with positions: {start, end, len}
+  const runs = [];
+  let s = -1;
+  for (let i = 0; i < len; i++) {
+    if (vals[i]) { if (s < 0) s = i; }
+    else if (s >= 0) { runs.push({ start: s, end: i - 1, len: i - s }); s = -1; }
   }
-  for (let c = 0; c < SIZE; c++) {
-    const col = Array.from({ length: SIZE }, (_, r) => (grid[r][c] === 1 || isGiven(r, c)) ? 1 : 0);
-    colClueEls[c].classList.toggle('clue-done', runsMatch(getRunsFromRow(col), PUZZLE_CONFIG.cols[c]));
+  if (s >= 0) runs.push({ start: s, end: len - 1, len: len - s });
+
+  // Empty-line clue "[0]" → crossed off only when nothing is filled
+  if (n === 1 && clue[0] === 0) { flags[0] = runs.length === 0; return flags; }
+  if (runs.length === 0) return flags;
+
+  const minSpace = arr => arr.length ? arr.reduce((a, b) => a + b, 0) + arr.length - 1 : 0;
+
+  // LEFT pass: match clue prefix to the leftmost runs
+  let L = 0;                          // number of clues crossed off from the left
+  for (let ri = 0; ri < runs.length && L < n; ri++) {
+    const r = runs[ri];
+    if (r.len !== clue[L]) break;     // prefix lengths must match exactly
+    // room to the right for the remaining clues (need a gap after this run)
+    const spaceRight = len - (r.end + 2);
+    if (minSpace(clue.slice(L + 1)) > Math.max(0, spaceRight)) break;
+    flags[L] = true;
+    L++;
+  }
+
+  // RIGHT pass: match clue suffix to the rightmost runs (without re-claiming
+  // runs/clues the left pass already took)
+  let R = 0;
+  for (let ri = runs.length - 1; ri >= L; ri--) {
+    const ci = n - 1 - R;
+    if (ci < L) break;
+    const r = runs[ri];
+    if (r.len !== clue[ci]) break;
+    const spaceLeft = r.start - 1;    // room to the left for the earlier clues
+    if (minSpace(clue.slice(0, ci)) > Math.max(0, spaceLeft)) break;
+    flags[ci] = true;
+    R++;
+  }
+
+  return flags;
+}
+
+function applyClueFlags(clueEl, flags) {
+  const spans = clueEl.children;
+  for (let i = 0; i < spans.length; i++)
+    spans[i].classList.toggle('done', !!flags[i]);
+}
+
+function updateClueHighlights() {
+  for (let r = 0; r < ROWS; r++) {
+    const vals = Array.from({ length: COLS }, (_, c) => (grid[r][c] === 1 || isGiven(r, c)) ? 1 : 0);
+    applyClueFlags(rowClueEls[r], clueDoneFlags(vals, PUZZLE_CONFIG.rows[r]));
+  }
+  for (let c = 0; c < COLS; c++) {
+    const vals = Array.from({ length: ROWS }, (_, r) => (grid[r][c] === 1 || isGiven(r, c)) ? 1 : 0);
+    applyClueFlags(colClueEls[c], clueDoneFlags(vals, PUZZLE_CONFIG.cols[c]));
   }
 }
 
 function checkWin() {
-  for (let r = 0; r < SIZE; r++) {
-    const row = Array.from({ length: SIZE }, (_, c) => (grid[r][c] === 1 || isGiven(r, c)) ? 1 : 0);
+  for (let r = 0; r < ROWS; r++) {
+    const row = Array.from({ length: COLS }, (_, c) => (grid[r][c] === 1 || isGiven(r, c)) ? 1 : 0);
     if (!runsMatch(getRunsFromRow(row), PUZZLE_CONFIG.rows[r])) return false;
   }
-  for (let c = 0; c < SIZE; c++) {
-    const col = Array.from({ length: SIZE }, (_, r) => (grid[r][c] === 1 || isGiven(r, c)) ? 1 : 0);
+  for (let c = 0; c < COLS; c++) {
+    const col = Array.from({ length: ROWS }, (_, r) => (grid[r][c] === 1 || isGiven(r, c)) ? 1 : 0);
     if (!runsMatch(getRunsFromRow(col), PUZZLE_CONFIG.cols[c])) return false;
   }
   return true;
@@ -624,10 +704,10 @@ function cellFromClient(clientX, clientY) {
   const x = (clientX - rect.left)  / scale;
   const y = (clientY - rect.top)   / scale;
 
-  // Subtract the clue strip (+ 1px border + gap) — zero when grid is hidden
-  const clueOffX = gridHidden ? 0 : CLUE_W + GAP;
-  const clueOffY = gridHidden ? 0 : CLUE_H + GAP;
-  const cellStep = gridHidden ? CELL : CELL + GAP;
+  // Subtract the clue strip (+ 1px border + gap)
+  const clueOffX = CLUE_W + GAP;
+  const clueOffY = CLUE_H + GAP;
+  const cellStep = CELL + GAP;
 
   const xCell = x - clueOffX;
   const yCell = y - clueOffY;
@@ -637,7 +717,7 @@ function cellFromClient(clientX, clientY) {
   const col = Math.floor(xCell / cellStep);
   const row = Math.floor(yCell / cellStep);
 
-  if (col < 0 || col >= SIZE || row < 0 || row >= SIZE) return null;
+  if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return null;
   return { r: row, c: col };
 }
 
@@ -838,8 +918,8 @@ document.addEventListener('touchcancel', onTouchEnd);
 
 // ── Reset ─────────────────────────────────────────────────────
 function resetPuzzle() {
-  for (let r = 0; r < SIZE; r++)
-    for (let c = 0; c < SIZE; c++)
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
       if (!isGiven(r, c)) grid[r][c] = 0;
   renderAll();
   try { localStorage.removeItem(STORAGE_KEY); } catch {}
@@ -852,8 +932,8 @@ document.getElementById('btn-reset').addEventListener('click', () => {
 // Clear all ✕ marks without touching filled cells
 document.getElementById('btn-clear-marks').addEventListener('click', () => {
   let hadAny = false;
-  for (let r = 0; r < SIZE; r++)
-    for (let c = 0; c < SIZE; c++)
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
       if (grid[r][c] === 2) { grid[r][c] = 0; hadAny = true; }
   if (hadAny) { renderAll(); saveState(); }
 });
@@ -866,23 +946,98 @@ document.getElementById('btn-fit').addEventListener('click', () => {
   applyTransform();
 });
 
-// Toggle hide-grid mode
-const btnHideGrid = document.getElementById('btn-hide-grid');
-btnHideGrid.addEventListener('click', () => {
-  gridHidden = !gridHidden;
-  puzzleEl.classList.toggle('hide-grid', gridHidden);
-  btnHideGrid.classList.toggle('active', gridHidden);
-  btnHideGrid.textContent = gridHidden ? '▦ Show Grid' : '▦ Hide Grid';
-  // Recalculate sizer height — grid shrinks when clue strips collapse
+// ── QR view ───────────────────────────────────────────────────
+const btnCheckQR = document.getElementById('btn-check-qr');
+const qrCanvas   = document.getElementById('qr-canvas');
+const qrStatus   = document.getElementById('qr-status');
+let qrMode = false;
+
+// Is the cell at nonogram (r,c) "dark" (filled or given)?
+function nonoDark(r, c) {
+  return (grid[r][c] === 1 || isGiven(r, c)) ? 1 : 0;
+}
+
+// Is the nonogram solved? The QR region is blanked in puzzle.js (anti-cheat),
+// so completion is judged by the clues being satisfied — i.e. checkWin().
+function qrComplete() {
+  return checkWin();
+}
+
+// Render the full QR code: fixed modules from config, region from player fill
+function renderQR() {
+  const qrSize = PUZZLE_CONFIG.qr.size;
+  const matrix = PUZZLE_CONFIG.qr.matrix;
+  const quiet  = 4;                       // standard quiet-zone width (modules)
+  const total  = qrSize + quiet * 2;
+
+  // Pick a crisp integer module size that fits the viewport
+  const maxPx = Math.min(window.innerWidth - 32, 520);
+  const modPx = Math.max(2, Math.floor(maxPx / total));
+  const sizePx = modPx * total;
+
+  qrCanvas.width  = sizePx;
+  qrCanvas.height = sizePx;
+  const ctx = qrCanvas.getContext('2d');
+
+  // White background incl. quiet zone (needed for scanning)
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, sizePx, sizePx);
+
+  ctx.fillStyle = '#000000';
+  for (let r = 0; r < qrSize; r++) {
+    for (let c = 0; c < qrSize; c++) {
+      let dark;
+      const inRegion = r >= NONO.y && r < NONO.y + ROWS &&
+                       c >= NONO.x && c < NONO.x + COLS;
+      if (inRegion) {
+        dark = nonoDark(r - NONO.y, c - NONO.x) === 1;
+      } else {
+        dark = matrix[r][c] === 1;
+      }
+      if (dark) {
+        ctx.fillRect((quiet + c) * modPx, (quiet + r) * modPx, modPx, modPx);
+      }
+    }
+  }
+
+  // Status line
+  if (qrComplete()) {
+    qrStatus.textContent = '✓ Code complete — scan it!';
+    qrStatus.className = 'complete';
+  } else {
+    qrStatus.textContent = 'Region incomplete — keep solving';
+    qrStatus.className = 'incomplete';
+  }
+}
+
+function enterQRMode() {
+  qrMode = true;
+  document.body.classList.add('qr-mode');
+  btnCheckQR.classList.add('active');
+  btnCheckQR.textContent = '← Back';
+  renderQR();
+}
+
+function exitQRMode() {
+  qrMode = false;
+  document.body.classList.remove('qr-mode');
+  btnCheckQR.classList.remove('active');
+  btnCheckQR.textContent = '▦ Check QR';
   applyScale();
+}
+
+btnCheckQR.addEventListener('click', () => {
+  qrMode ? exitQRMode() : enterQRMode();
 });
+
+window.addEventListener('resize', () => { if (qrMode) renderQR(); });
 
 // ── Win ───────────────────────────────────────────────────────
 function showWin() {
   // Auto-clear all marks so the completed image is clean
   let changed = false;
-  for (let r = 0; r < SIZE; r++)
-    for (let c = 0; c < SIZE; c++)
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
       if (grid[r][c] === 2) { grid[r][c] = 0; changed = true; }
   if (changed) { renderAll(); saveState(); }
   document.getElementById('win-overlay').classList.add('show');
