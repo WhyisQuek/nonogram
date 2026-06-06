@@ -225,8 +225,8 @@
 
     /* given / pre-filled clue cells */
     .cell.given {
-      background: #d8d2c4;
-      border-color: #d8d2c4;
+      background: #c8a96e;
+      border-color: #c8a96e;
       cursor: default;
     }
 
@@ -253,14 +253,14 @@
       border: none;
     }
 
-    /* filled + given: solid block, no seam */
+    /* filled + given: solid block, no seam — given matches filled in hide mode */
     #puzzle.hide-grid .cell.filled {
       background: var(--filled);
       box-shadow: 0 0 0 0.75px var(--filled);
     }
     #puzzle.hide-grid .cell.given {
-      background: #d8d2c4;
-      box-shadow: 0 0 0 0.75px #d8d2c4;
+      background: var(--filled);
+      box-shadow: 0 0 0 0.75px var(--filled);
     }
 
     /* empty + marked: invisible — blend into background */
@@ -304,6 +304,14 @@
       color: var(--text);
       letter-spacing: 0.1em;
     }
+    #win-hint {
+      font-size: 0.78rem;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+    }
+    #win-hint strong {
+      color: var(--filled);
+    }
     #win-overlay .btn { margin-top: 8px; }
 
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -329,7 +337,7 @@
       flex-shrink: 0;
     }
     .swatch-filled { background: var(--filled); }
-    .swatch-given  { background: #d8d2c4; }
+    .swatch-given  { background: #c8a96e; }
     .swatch-marked { background: var(--marked); position: relative; overflow: hidden; }
     .swatch-marked::before,
     .swatch-marked::after {
@@ -377,6 +385,7 @@
 <div id="win-overlay">
   <h2>Solved! ✓</h2>
   <p>Puzzle complete — well done.</p>
+  <p id="win-hint">Press <strong>▦ Hide Grid</strong> to reveal the image.</p>
   <button class="btn" id="btn-win-ok">OK</button>
 </div>
 
