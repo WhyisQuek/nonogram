@@ -188,11 +188,10 @@
       transition: color 0.12s, opacity 0.12s;
     }
 
-    /* individual clue numbers crossed off as their run is satisfied */
+    /* whole clue line dimmed once its row/column is fully satisfied */
     .clue-num.done {
       color: var(--text-dim);
       opacity: 0.4;
-      text-decoration: line-through;
     }
 
     /* section borders every 5 cells */
@@ -598,77 +597,22 @@ function renderAll() {
   updateClueHighlights();
 }
 
-// Compute, for one line, which clue numbers can be confidently crossed off.
-// Returns a boolean[] aligned to `clue`.
-//
-// Position-aware: each completed run is matched to a clue only if it sits where
-// that clue could actually go. Left-anchored runs are matched from the left and
-// must leave room on their right for the remaining clues; right-anchored runs
-// likewise from the right. This avoids crossing off the wrong number when two
-// clues share a length (e.g. a half-finished "3" won't be mistaken for a "2").
-function clueDoneFlags(vals, clue) {
-  const n = clue.length;
-  const len = vals.length;
-  const flags = new Array(n).fill(false);
-
-  // Build filled runs with positions: {start, end, len}
-  const runs = [];
-  let s = -1;
-  for (let i = 0; i < len; i++) {
-    if (vals[i]) { if (s < 0) s = i; }
-    else if (s >= 0) { runs.push({ start: s, end: i - 1, len: i - s }); s = -1; }
-  }
-  if (s >= 0) runs.push({ start: s, end: len - 1, len: len - s });
-
-  // Empty-line clue "[0]" → crossed off only when nothing is filled
-  if (n === 1 && clue[0] === 0) { flags[0] = runs.length === 0; return flags; }
-  if (runs.length === 0) return flags;
-
-  const minSpace = arr => arr.length ? arr.reduce((a, b) => a + b, 0) + arr.length - 1 : 0;
-
-  // LEFT pass: match clue prefix to the leftmost runs
-  let L = 0;                          // number of clues crossed off from the left
-  for (let ri = 0; ri < runs.length && L < n; ri++) {
-    const r = runs[ri];
-    if (r.len !== clue[L]) break;     // prefix lengths must match exactly
-    // room to the right for the remaining clues (need a gap after this run)
-    const spaceRight = len - (r.end + 2);
-    if (minSpace(clue.slice(L + 1)) > Math.max(0, spaceRight)) break;
-    flags[L] = true;
-    L++;
-  }
-
-  // RIGHT pass: match clue suffix to the rightmost runs (without re-claiming
-  // runs/clues the left pass already took)
-  let R = 0;
-  for (let ri = runs.length - 1; ri >= L; ri--) {
-    const ci = n - 1 - R;
-    if (ci < L) break;
-    const r = runs[ri];
-    if (r.len !== clue[ci]) break;
-    const spaceLeft = r.start - 1;    // room to the left for the earlier clues
-    if (minSpace(clue.slice(0, ci)) > Math.max(0, spaceLeft)) break;
-    flags[ci] = true;
-    R++;
-  }
-
-  return flags;
-}
-
-function applyClueFlags(clueEl, flags) {
+// Grey out a whole clue line (all its numbers) once that row/column's runs
+// exactly match the clue — i.e. the line is completely satisfied.
+function applyClueDone(clueEl, done) {
   const spans = clueEl.children;
   for (let i = 0; i < spans.length; i++)
-    spans[i].classList.toggle('done', !!flags[i]);
+    spans[i].classList.toggle('done', done);
 }
 
 function updateClueHighlights() {
   for (let r = 0; r < ROWS; r++) {
-    const vals = Array.from({ length: COLS }, (_, c) => (grid[r][c] === 1 || isGiven(r, c)) ? 1 : 0);
-    applyClueFlags(rowClueEls[r], clueDoneFlags(vals, PUZZLE_CONFIG.rows[r]));
+    const row = Array.from({ length: COLS }, (_, c) => (grid[r][c] === 1 || isGiven(r, c)) ? 1 : 0);
+    applyClueDone(rowClueEls[r], runsMatch(getRunsFromRow(row), PUZZLE_CONFIG.rows[r]));
   }
   for (let c = 0; c < COLS; c++) {
-    const vals = Array.from({ length: ROWS }, (_, r) => (grid[r][c] === 1 || isGiven(r, c)) ? 1 : 0);
-    applyClueFlags(colClueEls[c], clueDoneFlags(vals, PUZZLE_CONFIG.cols[c]));
+    const col = Array.from({ length: ROWS }, (_, r) => (grid[r][c] === 1 || isGiven(r, c)) ? 1 : 0);
+    applyClueDone(colClueEls[c], runsMatch(getRunsFromRow(col), PUZZLE_CONFIG.cols[c]));
   }
 }
 
