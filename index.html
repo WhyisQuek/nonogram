@@ -27,8 +27,8 @@
 
       /* Natural (unscaled) sizes — JS will apply a scale transform */
       --cell:    28px;
-      --clue-w:  104px;   /* fits up to 4 numbers across a row clue */
-      --clue-h:  104px;   /* fits up to 4 numbers stacked in a column clue */
+      --clue-w:  56px;    /* fits up to 2 numbers across a row clue */
+      --clue-h:  56px;    /* fits up to 2 numbers stacked in a column clue */
       --gap:     1px;
     }
 
@@ -162,8 +162,8 @@
       flex-direction: column;
       align-items: center;
       justify-content: flex-end;
-      padding: 8px 2px;
-      gap: 8px;
+      padding: 4px 2px;
+      gap: 5px;
       border-bottom: 2px solid var(--border-hi);
     }
 
@@ -174,8 +174,8 @@
       flex-direction: row;
       align-items: center;
       justify-content: flex-end;
-      padding: 2px 8px;
-      gap: 8px;
+      padding: 2px 6px;
+      gap: 6px;
       border-right: 2px solid var(--border-hi);
     }
 
@@ -317,6 +317,49 @@
 
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
+    /* ── Intro overlay ───────────────────────────────────────── */
+    #intro-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.88);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    #intro-overlay.show {
+      display: flex;
+      animation: fadeIn 0.4s ease;
+    }
+    #intro-box {
+      background: var(--surface);
+      border: 1px solid var(--border-hi);
+      border-radius: 4px;
+      padding: 32px 28px;
+      max-width: 380px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      text-align: center;
+    }
+    #intro-box h2 {
+      font-family: 'Syne', sans-serif;
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: var(--filled);
+      letter-spacing: -0.02em;
+    }
+    #intro-box p {
+      font-size: 0.82rem;
+      color: var(--text);
+      line-height: 1.7;
+      letter-spacing: 0.04em;
+    }
+    #intro-box strong { color: var(--accent); }
+    #btn-intro-ok { margin-top: 8px; align-self: center; padding: 10px 28px; }
+
     /* ── Legend ──────────────────────────────────────────────── */
     #legend {
       margin-top: 14px;
@@ -389,10 +432,18 @@
 </div>
 
 <div id="win-overlay">
-  <h2>Solved! ✓</h2>
-  <p>Puzzle complete — well done.</p>
+  <h2>Puzzle Complete!</h2>
   <p id="win-hint">Press <strong>▦ Check QR</strong> to complete the code.</p>
   <button class="btn" id="btn-win-ok">OK</button>
+</div>
+
+<div id="intro-overlay">
+  <div id="intro-box">
+    <h2>How to play</h2>
+    <p>Complete the nonogram to reveal the missing segment of a QR code.</p>
+    <p>Once solved, press <strong>▦ Check QR</strong> and scan the completed code — it will tell you what to do next to claim your reward.</p>
+    <button class="btn" id="btn-intro-ok">Let's go</button>
+  </div>
 </div>
 
 <script src="puzzle.js"></script>
@@ -404,8 +455,8 @@ const ROWS   = NONO.height;   // = PUZZLE_CONFIG.rows.length
 const COLS   = NONO.width;    // = PUZZLE_CONFIG.cols.length
 const CELL   = 28;   // natural cell size in px (matches --cell CSS var)
 const GAP    = 1;
-const CLUE_W = 104;  // natural clue area width  (matches --clue-w)
-const CLUE_H = 104;  // natural clue area height (matches --clue-h)
+const CLUE_W = 56;   // natural clue area width  (matches --clue-w)
+const CLUE_H = 56;   // natural clue area height (matches --clue-h)
 
 // Natural pixel dimensions of the nonogram (with clue strips)
 function naturalW() { return CLUE_W + COLS * CELL + (COLS + 1) * GAP; }
@@ -1005,6 +1056,27 @@ buildGrid();
 applyScale();   // scale before loading state so layout is correct
 loadState();
 renderAll();
+
+// ── Intro popup (first visit only) ────────────────────────────
+const INTRO_KEY = `nonogram-intro-seen-${PUZZLE_CONFIG.title}`;
+const introOverlay = document.getElementById('intro-overlay');
+const btnIntroOk   = document.getElementById('btn-intro-ok');
+
+function dismissIntro() {
+  introOverlay.classList.remove('show');
+  try { localStorage.setItem(INTRO_KEY, '1'); } catch {}
+}
+
+btnIntroOk.addEventListener('click', dismissIntro);
+introOverlay.addEventListener('click', e => {
+  if (e.target === introOverlay) dismissIntro();
+});
+
+try {
+  if (!localStorage.getItem(INTRO_KEY)) introOverlay.classList.add('show');
+} catch {
+  introOverlay.classList.add('show');
+}
 </script>
 </body>
 </html>
