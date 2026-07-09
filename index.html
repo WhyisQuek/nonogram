@@ -114,6 +114,28 @@
       background: #101820;
     }
 
+    /* primary action — Check QR reads as the main button */
+    .btn-primary {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* secondary controls — Clear Marked / Fit / Reset, de-emphasised */
+    .btn-secondary {
+      font-size: 0.58rem;
+      padding: 6px 12px;
+      border-color: var(--border);
+      color: var(--text-dim);
+      background: transparent;
+    }
+    .btn-secondary:active {
+      background: var(--surface);
+      color: var(--text);
+    }
+
+    /* push the secondary controls onto their own row */
+    .toolbar-break { flex-basis: 100%; height: 0; }
+
     /* ── Puzzle scale wrapper ────────────────────────────────── */
     /*
      * #puzzle-sizer is a fixed-size "viewport" (clips overflow) sized to
@@ -406,10 +428,11 @@
   <div id="toolbar">
     <button class="btn btn-mode active draw-only" id="btn-fill">■ Fill</button>
     <button class="btn btn-mode btn-mark draw-only" id="btn-mark">✕ Mark</button>
-    <button class="btn draw-only" id="btn-clear-marks">✕ Clear</button>
-    <button class="btn" id="btn-check-qr">▦ Check QR</button>
-    <button class="btn draw-only" id="btn-fit">⤢ Fit</button>
-    <button class="btn draw-only" id="btn-reset">↺ Reset</button>
+    <button class="btn btn-primary" id="btn-check-qr">▦ Check QR</button>
+    <div class="toolbar-break draw-only"></div>
+    <button class="btn btn-secondary draw-only" id="btn-clear-marks">✕ Clear Marked</button>
+    <button class="btn btn-secondary draw-only" id="btn-fit">⤢ Fit</button>
+    <button class="btn btn-secondary draw-only" id="btn-reset">↺ Reset</button>
   </div>
 
   <div id="puzzle-sizer">
@@ -425,7 +448,6 @@
 
   <div id="legend">
     <div class="legend-item"><div class="legend-swatch swatch-filled"></div>Filled</div>
-    <div class="legend-item"><div class="legend-swatch swatch-given"></div>Given</div>
     <div class="legend-item"><div class="legend-swatch swatch-marked"></div>Marked</div>
     <div class="legend-item"><div class="legend-swatch swatch-empty"></div>Empty</div>
   </div>
